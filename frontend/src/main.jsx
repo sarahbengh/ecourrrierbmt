@@ -1,3 +1,5 @@
+
+import './disableDevTools.js';  
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
@@ -8,6 +10,7 @@ import LoginPage from './Pages/LoginPage.jsx';
 
 // sidebar
 import Dashboard from './Pages/Dashboard.jsx';
+import AdminDashboard from './Pages/AdminDashboard.jsx';
 import EnregistrerUnCourrier from "./Pages/EnregistrerUnCourrier.jsx"
 import TraiterUCourrier from "./Pages/TraiterUCourrier.jsx"
 import CourriersArrives from './Pages/CourriersArrives.jsx';
@@ -42,6 +45,10 @@ const router = createBrowserRouter([
   {
     path: "/Dashboard",
     element: <Dashboard/>,
+  },
+  {
+    path: "/AdminDashboard",
+    element: <AdminDashboard/>,
   },
   {
     path: "/Settings",

@@ -5,28 +5,43 @@ from config import Config
 from flask_socketio import SocketIO
 from flask_jwt_extended import JWTManager
 from flask_session import Session
+from flask_cors import CORS
 import os
 
 db = SQLAlchemy()
 bcrypt = Bcrypt()
 socketio = SocketIO()
-jwt = JWTManager()
-sess = Session()  # ✅ Garde l'instance en dehors de create_app()
+jwt = JWTManager()  # ✅ Déclaré une seule fois ici
+sess = Session()
 
 def create_app():
     app = Flask(__name__)
-    app.config.from_object(Config)  # ✅ Charge la config depuis ton fichier Config
-    app.config["SESSION_TYPE"] = "filesystem"  # Permet de stocker la session côté serveur
+    app.config.from_object(Config)
+    
+    # Configuration des sessions
+    app.config["SESSION_TYPE"] = "filesystem"
     app.secret_key = "un_secret_aleatoire"
-    app.config["JWT_SECRET_KEY"] = "chaima"
 
-    # Initialisation correcte des extensions
-    sess.init_app(app)  # ✅ Utilise l'instance globale
+    # Configuration JWT
+    app.config["JWT_SECRET_KEY"] = "super-secret"  # Choisir une seule valeur
+    app.config['JWT_TOKEN_LOCATION'] = ['cookies']
+    app.config['JWT_COOKIE_SECURE'] = True  # True en production (HTTPS)
+    app.config['JWT_COOKIE_HTTPONLY'] = True
+    app.config['JWT_ACCESS_COOKIE_PATH'] = '/'
+    app.config['JWT_COOKIE_CSRF_PROTECT'] = True
+    app.config['JWT_CSRF_IN_COOKIES'] = True
+
+    # CORS avec support credentials pour les cookies cross-origin
+    CORS(app, supports_credentials=True, origins=["*"])
+
+    # Initialisation des extensions
+    sess.init_app(app)
     db.init_app(app)
     bcrypt.init_app(app)
     socketio.init_app(app)
-    jwt.init_app(app)  # ✅ Ne pas recréer une nouvelle instance ici !
+    jwt.init_app(app)  # ✅ Initialisation correcte (pas de recréation)
 
+    # Import des routes et modèles
     from .routers.auth import auth_bp
     from .routers.contact import google_bp
     from .routers.courrier import courrier_bp
@@ -36,17 +51,11 @@ def create_app():
         db.create_all()
         app.register_blueprint(auth_bp, url_prefix="/auth")
         app.register_blueprint(google_bp)
-        app.register_blueprint(courrier_bp)
+        app.register_blueprint(courrier_bp, url_prefix="/courrier")
         print("✅ Tables créées avec succès !")
 
-    # ✅ Test si la session fonctionne
-    @app.route("/set-test-session")
+    @app.route("/")
     def set_test_session():
-        session["test"] = "OK"
-        return "Session enregistrée."
-
-    @app.route("/get-test-session")
-    def get_test_session():
-        return f"Valeur en session : {session.get('test', '❌ Rien trouvé')}"
+        return "hello to the app."
 
     return app

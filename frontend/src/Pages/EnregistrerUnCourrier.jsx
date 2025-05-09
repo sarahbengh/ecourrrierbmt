@@ -1,65 +1,55 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { PDFDocument } from 'pdf-lib';
+import Sidebar from '../components/Sidebar';
+import { useNavigate } from 'react-router-dom';
+
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  if (match) return match[2];
+  return null;
+}
 
 const EnregistrerUnCourrier = () => {
   const [courrier, setCourrier] = useState({
-    type: 'arrivé',
+    type_courrier: 'arrivé',
     priority: '',
-    dateEmail: '',
-    arrivalDate: '',
     object: '',
-    sender: '',
-    initiatrice: '',
-    traitante: '',
-    listeDiffusion: [],
+    sender_id: '',
+    diffusion_ids: [],
     file: null,
-    fileName: ''
   });
 
-  const [contactList, setContactList] = useState([]);
-  const [diffusionList, setDiffusionList] = useState(["DGA", "DO", "DFC", "DMKT", "DRHM", "DT", "autre"]);
-  const [userName, setUserName] = useState("");
-  const [dragging, setDragging] = useState(false);
+  const [fileName, setFileName] = useState('');
+  const [message, setMessage] = useState('');
+  const [diffusionOptions] = useState([
+    { id: 2, name: 'DGA' },
+    { id: 3, name: 'DO' },
+    { id: 4, name: 'DRH' },
+  ]);
+
+  const [currentUser, setCurrentUser] = useState(null);
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
-    axios.get('/api/user', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
-      .then(response => setUserName(response.data.name))
-      .catch(error => console.error(error));
-
-    axios.get('/api/contacts', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
-      .then(response => setContactList(response.data))
-      .catch(error => console.error(error));
+    axios.get('http://localhost:5000/auth/me', { withCredentials: true })
+      .then(res => setCurrentUser(res.data))
+      .catch(err => console.error("Erreur récupération user connecté", err));
   }, []);
 
-  const handleFileChange = async (file) => {
-    if (file) {
-      setCourrier({ ...courrier, file, fileName: file.name });
-
-      if (file.type === 'application/pdf') {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdfDoc = await PDFDocument.load(arrayBuffer);
-        const text = await pdfDoc.getTextContent();
-        setCourrier({ ...courrier, object: text.items[0].str || '' });
-      }
+  const handleLogout = async () => {
+    try {
+      const csrfToken = getCookie('csrf_access_token');
+      const res = await axios.post('http://localhost:5000/auth/logout', {}, {
+        headers: { 'X-CSRF-TOKEN': csrfToken },
+        withCredentials: true
+      });
+      alert(res.data.message);
+      navigate('/LoginPage');
+    } catch (err) {
+      console.error('Erreur de déconnexion:', err);
+      setError('Impossible de se déconnecter');
     }
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setDragging(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    setDragging(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files[0];
-    handleFileChange(file);
   };
 
   const handleChange = (e) => {
@@ -68,126 +58,153 @@ const EnregistrerUnCourrier = () => {
   };
 
   const handleDiffusionChange = (e) => {
-    const { value, checked } = e.target;
-    if (value === "autre" && checked) {
-      const autre = prompt("Veuillez saisir l'entité:");
-      setDiffusionList([...diffusionList, autre]);
-      setCourrier({ ...courrier, listeDiffusion: [...courrier.listeDiffusion, autre] });
-    } else if (checked) {
-      setCourrier({ ...courrier, listeDiffusion: [...courrier.listeDiffusion, value] });
-    } else {
-      setCourrier({ ...courrier, listeDiffusion: courrier.listeDiffusion.filter(item => item !== value) });
+    const selectedId = parseInt(e.target.value);
+    if (!courrier.diffusion_ids.includes(selectedId)) {
+      setCourrier({ ...courrier, diffusion_ids: [...courrier.diffusion_ids, selectedId] });
     }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const formData = new FormData();
-    Object.keys(courrier).forEach(key => {
-      formData.append(key, courrier[key]);
-    });
-
-    axios.post('/api/courriers', formData, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'multipart/form-data' } })
-      .then(response => alert('Courrier enregistré avec succès!'))
-      .catch(error => console.error(error));
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    setCourrier({ ...courrier, file });
+    setFileName(file.name);
   };
 
-  const handleRemoveFile = () => {
-    setCourrier({ ...courrier, file: null, fileName: '' });
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData();
+    formData.append('type_courrier', courrier.type_courrier);
+    formData.append('priority', courrier.priority);
+    formData.append('object', courrier.object);
+    formData.append('sender_id', courrier.sender_id);
+    courrier.diffusion_ids.forEach(id => formData.append('diffusion_ids', id));
+    if (courrier.file) {
+      formData.append('file', courrier.file);
+    }
+
+    try {
+      const response = await axios.post('http://localhost:5000/courrier/save_courrier', formData, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      setMessage(response.data.message || 'Courrier enregistré avec succès.');
+    } catch (error) {
+      console.error('Erreur lors de l’envoi du courrier:', error);
+      setMessage(error.response?.data?.message || 'Une erreur est survenue.');
+    }
   };
 
   return (
-    <div className="flex h-screen">
-      <div className="w-1/2 bg-[#02A8DB] text-white p-6 overflow-y-auto">
-        <h2 className="text-xl font-bold">Email arrivé (par défaut)</h2>
-        <div className="mt-4 space-y-4">
+    <div className="flex h-screen bg-gray-100">
+      <Sidebar />
+      <div className="flex-1 p-6 overflow-y-auto">
+
+        {/* Header avec bulle utilisateur */}
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">Enregistrer un courrier</h2>
+          {currentUser && (
+            <div className="relative group">
+              <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center cursor-pointer shadow">
+                {currentUser.role?.charAt(0).toUpperCase()}
+              </div>
+              <div className="absolute right-0 top-12 bg-white shadow-lg rounded p-4 hidden group-hover:block z-50">
+                <p className="font-bold text-gray-700">{currentUser.nom} {currentUser.prenom}</p>
+                <p className="text-sm text-gray-500">{currentUser.role}</p>
+                <div className="mt-2 space-y-2">
+                  <button className="text-blue-600 hover:underline w-full text-left">Mon profil</button>
+                  <button onClick={handleLogout} className="text-red-500 hover:underline w-full text-left">Déconnexion</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label>Type de courrier</label>
-            <select name="type" onChange={handleChange} className="form-select mt-1 block w-full bg-[#02A8DB] border-2 border-white hover:border-[#5041BC] focus:border-[#5041BC]">
+            <select
+              name="type_courrier"
+              value={courrier.type_courrier}
+              onChange={handleChange}
+              className="w-full border p-2 rounded"
+            >
               <option value="arrivé">Arrivé</option>
               <option value="départ">Départ</option>
             </select>
           </div>
+
           <div>
             <label>Priorité</label>
-            <select name="priority" onChange={handleChange} className="form-select mt-1 block w-full bg-[#02A8DB] border-2 border-white hover:border-[#5041BC] focus:border-[#5041BC]">
-              <option value="">Choisir une valeur</option>
-              <option value="low">Faible</option>
-              <option value="medium">Moyenne</option>
-              <option value="high">Haute</option>
-            </select>
+            <input
+              type="text"
+              name="priority"
+              value={courrier.priority}
+              onChange={handleChange}
+              className="w-full border p-2 rounded"
+              required
+            />
           </div>
-          <div>
-            <label>Date de réception de l'email</label>
-            <input type="date" name="dateEmail" onChange={handleChange} className="form-input mt-1 block w-full bg-[#02A8DB] border-2 border-white hover:border-[#5041BC] focus:border-[#5041BC]" />
-          </div>
-          <div>
-            <label>Date d'arrivée</label>
-            <input type="date" name="arrivalDate" onChange={handleChange} className="form-input mt-1 block w-full bg-[#02A8DB] border-2 border-white hover:border-[#5041BC] focus:border-[#5041BC]" />
-          </div>
+
           <div>
             <label>Objet</label>
-            <input type="text" name="object" onChange={handleChange} value={courrier.object} className="form-input mt-1 block w-full bg-[#02A8DB] border-2 border-white hover:border-[#5041BC] focus:border-[#5041BC]" />
+            <input
+              type="text"
+              name="object"
+              value={courrier.object}
+              onChange={handleChange}
+              className="w-full border p-2 rounded"
+              required
+            />
           </div>
+
           <div>
-            <label>Expéditeur</label>
-            <input type="text" name="sender" onChange={handleChange} value={courrier.sender} className="form-input mt-1 block w-full bg-[#02A8DB] border-2 border-white hover:border-[#5041BC] focus:border-[#5041BC]" />
+            <label>Expéditeur (ID)</label>
+            <input
+              type="text"
+              name="sender_id"
+              value={courrier.sender_id}
+              onChange={handleChange}
+              className="w-full border p-2 rounded"
+              required
+            />
           </div>
-          <div>
-            <label>Entité initiatrice</label>
-            <select name="initiatrice" onChange={handleChange} className="form-select mt-1 block w-full bg-[#02A8DB] border-2 border-white hover:border-[#5041BC] focus:border-[#5041BC]">
-              <option value="">Choisir une valeur</option>
-            </select>
-          </div>
-          <div>
-            <label>Entité traitante</label>
-            <select name="traitante" onChange={handleChange} className="form-select mt-1 block w-full bg-[#02A8DB] border-2 border-white hover:border-[#5041BC] focus:border-[#5041BC]">
-              <option value="">Choisir une valeur</option>
-            </select>
-          </div>
+
           <div>
             <label>Liste de diffusion</label>
-            <div className="flex flex-wrap space-y-2">
-              {diffusionList.map((item, index) => (
-                <div key={index} className="mr-4">
-                  <label>
-                    <input type="checkbox" value={item} onChange={handleDiffusionChange} className="form-checkbox text-[#02A8DB]" /> {item}
-                  </label>
-                </div>
+            <select onChange={handleDiffusionChange} className="w-full border p-2 rounded">
+              <option value="">-- Sélectionner --</option>
+              {diffusionOptions.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
               ))}
+            </select>
+            <div className="text-sm mt-2">
+              Sélectionnés: {courrier.diffusion_ids.map(id => diffusionOptions.find(u => u.id === id)?.name).join(', ')}
             </div>
           </div>
-        </div>
-      </div>
-      <div className="w-1/2 p-6 flex flex-col items-center justify-center">
-        <h1 className="text-2xl font-bold mb-4">Enregistrer un courrier</h1>
-        <div 
-          className={`border-dashed border-2 border-[#02A8DB] p-6 w-full h-full flex items-center justify-center relative ${dragging ? 'bg-gray-200' : 'bg-white'}`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <input type="file" name="file" onChange={(e) => handleFileChange(e.target.files[0])} className="hidden" id="file-upload" />
-          <label htmlFor="file-upload" className="cursor-pointer w-full h-full flex items-center justify-center absolute inset-0">
-            <div className="text-center text-[#02A8DB]">
-              <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <p>Glissez-déposez ou <span className="text-[#5041BC] underline">Choisir un fichier</span></p>
-            </div>
-          </label>
-          {courrier.file && (
-            <div className="absolute inset-0 p-4 bg-white flex flex-col items-center justify-center">
-              <button onClick={handleRemoveFile} className="mb-4 bg-red-500 text-white p-2 rounded">Supprimer le fichier</button>
-              {courrier.file.type === 'application/pdf' ? (
-                <iframe src={URL.createObjectURL(courrier.file)} className="w-full h-full" />
-              ) : (
-                <img src={URL.createObjectURL(courrier.file)} alt="Fichier téléchargé" className="w-full h-full object-contain" />
-              )}
-            </div>
-          )}
-        </div>
-        <button onClick={handleSubmit} className="mt-6 w-full bg-[#02A8DB] text-white p-3 rounded hover:bg-[#5041BC]">Valider  et Archiver le courrier</button>
+
+          <div>
+            <label>Fichier</label>
+            <input
+              type="file"
+              onChange={handleFileChange}
+              className="w-full border p-2 rounded"
+              accept=".pdf,.doc,.docx,.jpg,.png"
+            />
+            {fileName && <p className="text-sm text-gray-600 mt-1">Fichier sélectionné : {fileName}</p>}
+          </div>
+
+          <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">
+            Enregistrer
+          </button>
+        </form>
+        {message && <p className="mt-4 text-green-600">{message}</p>}
+        {error && <p className="mt-4 text-red-600">{error}</p>}
       </div>
     </div>
   );

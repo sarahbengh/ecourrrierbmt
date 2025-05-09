@@ -72,17 +72,24 @@ const Sidebarpsy = ({ children }) => {
           </div>
         </div>
         {menuItem.map((item, index) => (
-          <NavLink
-            to={item.path}
-            key={index}
-            className="link flex items-center justify-between text-white px-3 py-2 gap-2 hover:bg-white hover:text-black transition-all duration-500"
-            activeClassName="active bg-white text-black"
-          >
-            <div className="icon text-lg">{item.icon}</div>
-            <div style={{ display: isOpen ? 'block' : 'none' }} className="link_text">
-              {item.name}
-            </div>
-          </NavLink>
+         <NavLink
+         to={item.path}
+         key={index}
+         className={({ isActive }) =>
+           `link flex items-center justify-between px-3 py-2 gap-2 transition-all duration-500 ${
+             isActive ? "bg-white text-black" : "text-white hover:bg-white hover:text-black"
+           }`
+         }
+       >
+         <div className="icon text-lg">{item.icon}</div>
+         <div
+           style={{ display: isOpen ? 'block' : 'none' }}
+           className="link_text"
+         >
+           {item.name}
+         </div>
+       </NavLink>
+       
         ))}
       </div>
       <main className="w-full p-4">{children}</main>
